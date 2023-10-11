@@ -19,7 +19,7 @@ def count_cumulative(distribution: dict):
             key, val = keys[i], vals[i]
             cumulative[key] = val
             continue
-        key, prev, val = keys[i],keys[i-1], vals[i]
+        key, prev, val = keys[i], keys[i - 1], vals[i]
         cumulative[key] = round(cumulative[prev] + val, 3)
     return cumulative
 
@@ -74,15 +74,15 @@ class Simulation:
     distribution: dict = {1: 0.1, 2: 0.2, 3: 0.3, 4: 0.25, 5: 0.1, 6: 0.05}
     max_minute: int = 100
     function = print
+    server: Server = Server()
 
     def single_server_simulation(self):
         service_time_dist = self.distribution
         max_minute = self.max_minute
         function = self.function
+        server = self.server
 
-        server = Server()
         next_arival = 0
-
         interarivals = [random.randrange(1, 8) for i in range(int(max_minute / 2))]
         cumulative = count_cumulative(service_time_dist)
         no_customer = 1
