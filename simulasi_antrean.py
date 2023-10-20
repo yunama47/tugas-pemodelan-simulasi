@@ -1,6 +1,6 @@
 import random
 import time
-
+from typing import overload
 
 def avg_distribution(distribution: dict):
     a = 0
@@ -32,72 +32,144 @@ def distribute_random(ran: float, cumulative: dict):
 
 
 class Customer:
-    servicebegin = None
-    arrivaltime: int = -1
-    status: int = -1 #1: dilayani 2:ngantre 3:selesai
-    def __init__(self, name, srtime) -> None:
-        self.servicetime = srtime
-        self.timeleft = srtime
-        self.queuetime = 0
+    arrivalTime: int = -1
+    serviceBegin: int = -1
+    serviceTime: int = -1
+    timeLeft: int = -1
+    status: int = -1  # 1: dilayani 2:ngantre 3:selesai
+    queueTime: int = 0
+    name: str = "Unnamed Customer"
+
+    def __init__(self,
+                 name: str = "Unnamed Customer",
+                 serviceBegin: int = -1,
+                 arrivalTime: int = -1,
+                 serviceTime: int = -1,
+                 queued: bool = False
+                 ) -> None:
+        """
+        Object Class untuk customer
+        :param name: nama untuk customer
+        :param serviceBegin: menit mulai service
+        :param arrivalTime: menit kedatangan customer
+        :param serviceTime: lama service time untuk melayani customer
+        :param queued: True jika customer harus mengantri, False jika tidak
+        """
         self.name = name
+        self.serviceBegin = serviceBegin
+        self.arrivalTime = arrivalTime
+        self.serviceTime = serviceTime
+        if queued:
+            self.setQueueing()
+        else:
+            self.setServing()
+
+    def setQueueing(self):
+        self.status = 2
+
+    def setServing(self):
+        self.status = 1
+
+    def setDone(self):
+        self.status = 3
+    @property
+    def isDone(self) -> bool:
+        return self.status == 3
+    @property
+    def isQueueing(self) -> bool:
+        return self.status == 2
+    @property
+    def isServing(self) -> bool:
+        return self.status == 1
 
     def __str__(self) -> str:
         return self.name
 
     def __repr__(self):
         return self.name
+    @overload
+    def __eq__(self, string:str)-> bool:...
+    def __eq__(self, other):
+        return self.name == other
+
 
 
 class Server:
-    current_customer: Customer = None
-    busytime: int = 0
-    idletime: int = 0
-    customercount: int = 0
-    utility: float = 0.0
-    name: str = ""
-    def __init__(self) -> None:
-        self.busy = False
-        self.queue = []
-        self.servered_customers = []
+    currentCustomer: Customer = None
+    status:int = 0 # 0 = idle , 1 = busy
+    busyTime: int = 0
+    idleTime: int = 0
+    name: str = "unnamed server"
+    queue: list = []
+    serveredCustomer: list = []
+    distribution: dict = {}
+    @property
+    def customer_count(self)->int:
+        return len(self.serveredCustomer)
+    @property
+    def queue_count(self) -> int:
+        return len(self.queue)
+    @property
+    def isBusy(self)->bool:
+        return self.status == 1
+    @property
+    def isIdle(self)->bool:
+        return self.status == 0
+    @property
+    def utility(self)->float:
+        return self.busyTime / (self.busyTime + self.idleTime)
 
-    def set_busy(self, b):
-        self.busy = b
+    def set_busy(self):
+        self.status = 1
+
+    def set_idle(self):
+        self.status = 0
 
     def enqueue(self, customer):
         self.queue.append(customer)
 
     def dequeue(self):
-        nextCustomer: Customer = self.queue.pop(0)
-        return nextCustomer
+        return self.queue.pop(0)
 
     def update(self, function):
-        if self.busy:
-            self.current_customer.timeleft -= 1
-            if self.current_customer.timeleft == 0:
-                self.set_busy(False)
-                doneCustomer = self.current_customer
-                self.current_customer = None
-                self.servered_customers.append(doneCustomer)
+        if self.isBusy:
+            self.currentCustomer.timeLeft -= 1
+            if self.currentCustomer.timeLeft <= 0:
+                self.set_busy()
+                doneCustomer = self.currentCustomer
+                doneCustomer.setDone()
+                self.currentCustomer = Customer('null')
+                self.serveredCustomer.append(doneCustomer)
                 function(f"DN!{doneCustomer} done | queue = {self.queue}")
             else:
                 function(
-                    f"IDL!current customer = {self.current_customer} | time left = {self.current_customer.timeleft} | queue = {self.queue}")
+                    f"IDL!current customer = {self.currentCustomer} | time left = {self.currentCustomer.timeLeft} | queue = {self.queue}")
 
         if self.queue:
             for customer in self.queue:
                 customer.queuetime += 1
-        # function(
-        #     f"=================================\ncurrent = {self.current_customer}, busy = {self.busy}, queue = {self.queue}\n== debug [end] ==")
 
+    def __init__(self,
+                 serviceTimeDistribution: dict,
+                 name: str = "unnamed server"
+                 ) -> None:
+        self.name = name
+        self.distribution = serviceTimeDistribution
+    def __str__(self) -> str:
+        return self.name
+
+    def __repr__(self):
+        return self.name
 
 class Simulation:
     # distribution: dict = {1: 0.1, 2: 0.2, 3: 0.3, 4: 0.25, 5: 0.1, 6: 0.05}
     distribution: dict = {7: 0.1, 3: 0.2, 9: 0.3, 8: 0.25, 6: 0.1, 2: 0.05}
     max_minute: int = 100
-    function = lambda self, text: print(text.split("!")[-1])
+    function = lambda self, text: print(text.split("!")[-1]) if self.verbose else None
     delay: float = 0.0
     server: Server = None
     idle_time: int = 0
+
     def create_server(self):
         self.server = Server()
 
@@ -115,9 +187,8 @@ class Simulation:
         for minute in range(max_minute):
             function(f"IDL!=== minute {minute} ===")
             # function(
-            #     f"== debug [start] ==\ncurrent = {server.current_customer}, busy = {server.busy}, queue = {server.queue}\n=================================")
             if minute == next_arival:
-            #while minute == (next_arival+interarivals.pop(0)):
+                # while minute == (next_arival+interarivals.pop(0)):
                 if not server.busy and not server.queue:
                     service_time = distribute_random(random.random(), cumulative)
                     service_done = minute + service_time - 1
@@ -149,7 +220,7 @@ class Simulation:
             function("IDL!\n")
             time.sleep(self.delay)
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, verbose=True, **kwargs) -> None:
         """
         class untuk simulasi
         :param distribution: distribusi service time
@@ -164,5 +235,10 @@ class Simulation:
             self.function = kwargs["function"]
         if kwargs.get("delay"):
             self.delay = kwargs["delay"]
-
+        self.verbose = verbose
         self.create_server()
+
+
+if __name__ == '__main__':
+    print(Customer("null") == Customer("nul"))
+    pass
