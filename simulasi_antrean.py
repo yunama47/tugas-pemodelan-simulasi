@@ -41,7 +41,7 @@ class Customer:
     status: int = -1  # 1: dilayani 2:ngantre 3:selesai
     queueTime: int = 0
     name: str = "Unnamed Customer"
-    server: str = "not served"
+    server = "not served"
 
     def __init__(self,
                  name: str = "Unnamed Customer",
@@ -56,19 +56,19 @@ class Customer:
         self.name = name
         self.arrivalTime = arrivalTime
 
-    def serveBy(self, Server, srvtime, srvbegin):
+    def serveBy(self, server, srvtime, srvbegin, queue=False):
         """
         method untuk serving customer
-        :param Server:
+        :param server:
         :param srvtime:
         :param servbegin:
         :return:
         """
-        self.server = Server
+        self.server = server
         self.serviceTime = srvtime
         self.timeLeft = srvtime
         self.serviceBegin = srvbegin
-        self.setServing()
+        self.setServing() if not queue else self.setQueueing()
 
     def setQueueing(self):
         self.status = 2
@@ -78,6 +78,7 @@ class Customer:
 
     def setDone(self):
         self.status = 3
+        self.server.serveredCustomer.append(self)
 
     @property
     def isDone(self) -> bool:
@@ -138,6 +139,23 @@ class Server:
     def currentServiceTime(self):
         return self.currentCustomer.timeLeft
 
+    @property
+    def newCustomerWaitingTime(self):
+        return self.currentServiceTime + sum([c.serviceTime for c in self.queue])
+
+    @property
+    def info(self)->str:
+        return f"""
+        server name    : {self.name}
+        current status : {self.status} ({"busy" if self.isBusy else "idle"})
+        utilization    : {self.utility * 100}% 
+                         (idle time = {self.idleTime}, busy time = {self.busyTime})
+        current customer: {self.currentCustomer} 
+        current queue   : {self.queue}
+        customer served : {self.serveredCustomer}
+        """
+
+
     def set_busy(self):
         self.status = 1
 
@@ -154,35 +172,36 @@ class Server:
         randVal = random.random()
         return distribute_random(randVal, self.cumulativeDist)
 
-    def update(self, current_minute, function):
+    def update(self, function):
+
+        if self.isIdle:
+            function(f"SERVER INFO \t| {self} is idling...")
+            self.idleTime += 1
         # function(f"\t== {self} updates ==")
+
         if self.isBusy:
+            self.busyTime += 1
             self.currentCustomer.timeLeft -= 1
-            if self.currentCustomer.timeLeft <= 0:
+            if self.currentCustomer.timeLeft == 0:
                 self.set_idle()
                 doneCustomer = self.currentCustomer
                 doneCustomer.setDone()
                 self.currentCustomer = Customer('null')
-                self.serveredCustomer.append(doneCustomer)
                 function(f"CUSTOMER INFO\t| {doneCustomer} is done ,nexts in {self}'s queue = {self.queue}")
             else:
                 function(
                     f"SERVER INFO \t| {self}'s current customer = {self.currentCustomer} with service time left = {self.currentCustomer.timeLeft}")
-            self.busyTime += 1
 
         if self.queue:
             if self.isIdle:
                 nextInQueue = self.dequeue()
-                serviceTime = self.newServiceTime()
-                nextInQueue.serveBy(Server=self, srvtime=serviceTime, srvbegin=current_minute)
-                self.set_busy()
                 self.currentCustomer = nextInQueue
+                self.set_busy()
                 function(f"SERVER INFO \t| {self} dequeued {nextInQueue} from queue, next in queue : {self.queue}")
+
             for customer in self.queue:
                 customer.queueTime += 1
-        if self.isIdle:
-            function(f"SERVER INFO \t| {self} is idling...")
-            self.idleTime += 1
+
 
     def reset(self):
         """
@@ -222,7 +241,7 @@ class SimulationReport:
 
 class SimulationModel:
     max_minute: int = -1
-    current_minute: int = 0
+    current_minute: int = 1
     cNumber: int = 1
     delay: float = 0.0
     servers: list = []
@@ -260,7 +279,7 @@ class SimulationModel:
 
     def servers_update(self, f):
         for server in self.servers:
-            server.update(self.current_minute, f)
+            server.update(f)
 
     def run(self, ofunc=print, verbose=True):
         """
@@ -272,7 +291,7 @@ class SimulationModel:
         assert self.current_minute <= self.max_minute, \
             f"current minute {self.current_minute} >= max minute {self.max_minute}, stopping simulation"
         func = ofunc if verbose else lambda x: None
-        func("========== SIMULATION START ==========")
+        func("========== SIMULATION STARTS ==========")
         self.newInterArrival()
         func(f"SIMULATION INFO\t| next customer interarrival = {self.interarival}")
         nextArrival = self.current_minute + self.interarival
@@ -287,11 +306,13 @@ class SimulationModel:
                     f"SERVER INFO \t| {server} has choosen for {cArrive} with current status : {'busy' if serverBusy else 'idle'}")
                 if serverBusy:
                     server.enqueue(cArrive)
-                    cArrive.setQueueing()
+                    serviceTime = server.newServiceTime()
+                    serviceBegin = server.currentServiceTime + self.current_minute
+                    cArrive.serveBy(server=server, srvtime=serviceTime, srvbegin=serviceBegin, queue=True)
                     func(f"CUSTOMER INFO\t| {cArrive} enqueued to {server}'s queue : {server.queue}")
                 else:
                     serviceTime = server.newServiceTime()
-                    cArrive.serveBy(Server=server, srvtime=serviceTime, srvbegin=self.current_minute)
+                    cArrive.serveBy(server=server, srvtime=serviceTime, srvbegin=self.current_minute)
                     server.currentCustomer = cArrive
                     server.set_busy()
                     func(f"SERVER INFO \t| {server} serving new customer : {cArrive}, with service time : {serviceTime}")
@@ -305,7 +326,7 @@ class SimulationModel:
             func(f'========== minute {self.current_minute} end ==========\n')
             self.current_minute += 1
             time.sleep(self.delay)
-        func("========== SIMULATION END ==========")
+        func("========== SIMULATION ENDS ==========")
 
     def choseServer(self):
         """
@@ -314,7 +335,7 @@ class SimulationModel:
         """
         Statuses = [s.status for s in self.servers]
         if sum(Statuses) == 0:  # jika semua server idle
-            sSelected = self.servers[0]  # server pertama dipilih
+            sSelected = self.servers[0]  # server pertama yang dipilih
             return sSelected.isBusy, sSelected
 
         if 0 < sum(Statuses) < self.server_count:  # jika beberapa server busy dan beberapa tidak
@@ -323,13 +344,13 @@ class SimulationModel:
             return sSelected.isBusy, sSelected
 
         if sum(Statuses) == self.server_count:  # jika semua server busy
-            CurrSrvcTimes = [s.currentServiceTime
+            waitTimes = [s.newCustomerWaitingTime
                              for s in self.servers]
-            selectedIdx = np.argmin(CurrSrvcTimes)  # server pertama dengan current service time terendah
+            selectedIdx = np.argmin(waitTimes)  # server pertama dengan waktu tunggu terendah
             sSelected = self.servers[selectedIdx]  # yang akan dipilih
             return sSelected.isBusy, sSelected
 
-    def continueRun(self, add_minute=1, autostart=True):
+    def continueRun(self, add_minute=1, autostart=True, verbose=True, func=print):
         """
         method untuk melanjutkan simulasi
         :param add_minute: berapa menit simulasi akan dilanjutkan
@@ -338,16 +359,17 @@ class SimulationModel:
         """
         self.max_minute += add_minute
         if autostart:
-            return self.run()
+            return self.run(verbose=verbose, ofunc=func)
 
-    def resetSimulation(self, newMaxMin=1):
+    def resetSimulation(self, newMaxMin=10):
         """
         method untuk mereset model simulasi
         :param newMaxMin: max_minute baru
         :return:
         """
-        self.current_minute = 0
+        self.current_minute = 1
         self.max_minute = newMaxMin
+        self.cNumber = 1
         for server in self.servers:
             server.reset()
 
@@ -355,16 +377,18 @@ class SimulationModel:
 if __name__ == '__main__':
     distribution1 = {1: 0.1, 2: 0.2, 3: 0.3, 4: 0.25, 5: 0.1, 6: 0.05}
     distribution2 = {7: 0.1, 3: 0.2, 9: 0.3, 8: 0.25, 6: 0.1, 2: 0.05}
-    distribution3 = {1: 0.25, 2: 0.25, 3: 0.5}
+    distribution3 = {3: 0.2, 2: 0.2, 1: 0.05, 0: 0.55}
 
     simulator = SimulationModel([
-                    Server(distribution1, name="Server1"),
-                    Server(distribution1, name="server2"),
-                ],
-                    intrArrivalDist=distribution3,
-                    max_minute=10,
-                    delay=0
+        Server(distribution1, name="Server1"),
+        Server(distribution1, name="server2"),
+        Server(distribution1, name="server3"),
+        Server(distribution1, name="server4"),
+    ],
+        intrArrivalDist=distribution3,
+        max_minute=1000,
+        delay=0
                 )
     simulator.run(verbose=False)
-    simulator.continueRun(add_minute=10, autostart=False)
-    simulator.run()
+    # simulator.resetSimulation()
+    simulator.continueRun(add_minute=5, verbose=True)
