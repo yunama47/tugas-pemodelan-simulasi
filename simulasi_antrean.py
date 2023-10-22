@@ -34,6 +34,7 @@ def distribute_random(ran: float, cumulative: dict):
 
 
 class Customer:
+    interarrival: int = -1
     arrivalTime: int = -1
     serviceBegin: int = -1
     serviceTime: int = -1
@@ -45,15 +46,17 @@ class Customer:
 
     def __init__(self,
                  name: str = "Unnamed Customer",
+                 interarrival: int = -1,
                  arrivalTime: int = -1,
                  ) -> None:
         """
         Object Class untuk customer
         :param name: nama untuk customer
+        :param interarrival: jarak kedatangan dengan customer sebelumnya
         :param arrivalTime: menit kedatangan customer
-        :param queued: True jika customer harus mengantri, False jika tidak
         """
         self.name = name
+        self.interarrival = interarrival
         self.arrivalTime = arrivalTime
 
     def serveBy(self, server, srvtime, srvbegin, queue=False):
@@ -247,7 +250,6 @@ class SimulationModel:
     servers: list = []
     cumulativeDist: dict = {}
     interarival: int = -1
-    interarivals: list = []
 
     @property
     def server_count(self):
@@ -273,9 +275,7 @@ class SimulationModel:
 
     def newInterArrival(self):
         randVal = random.random()
-        inter = distribute_random(randVal, self.cumulativeDist)
-        self.interarivals.append(inter)
-        self.interarival = inter
+        self.interarival = distribute_random(randVal, self.cumulativeDist)
 
     def servers_update(self, f):
         for server in self.servers:
@@ -299,7 +299,9 @@ class SimulationModel:
             func(f"========== minute {self.current_minute} start ==========")
             # func("\t== simulation updates ==")
             while self.current_minute == nextArrival:
-                cArrive = Customer(name=f"Customer {self.cNumber}", arrivalTime=self.current_minute)
+                cArrive = Customer(name=f"Customer {self.cNumber}",
+                                   interarrival=self.interarival, 
+                                   arrivalTime=self.current_minute)
                 func(f"CUSTOMER INFO\t| {cArrive} has arrived")
                 serverBusy, server = self.choseServer()
                 func(
