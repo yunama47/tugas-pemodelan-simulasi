@@ -154,8 +154,10 @@ class Server:
         utilization    : {self.utility * 100}% 
                          (idle time = {self.idleTime}, busy time = {self.busyTime})
         current customer: {self.currentCustomer} 
-        current queue   : {self.queue}
-        customer served : {self.serveredCustomer}
+        current queue   : {len(self.queue)} customer(s)
+                          {self.queue}
+        customer served : {self.customer_count} customer(s)
+                          {self.serveredCustomer}
         """
 
 
@@ -237,10 +239,6 @@ class Server:
         return self.name
 
 
-class SimulationReport:
-    # TODO
-    ...
-
 
 class SimulationModel:
     max_minute: int = -1
@@ -281,16 +279,20 @@ class SimulationModel:
         for server in self.servers:
             server.update(f)
 
-    def run(self, ofunc=print, verbose=True):
+    def run(self, ofunc=print, verbose=True, reset=True, add_minutes=0):
         """
         method untuk menjalankan simulasi
         :param ofunc: fungsi output yang akan digunakan untuk menampilkan hasil simulasi berkala
         :param verbose: jika True maka akan menjalankan fungsi yang diberikan pada 'ofunc'
+        :param reset: jika True maka akan mengulang kondisi simulasi dan server ke kondisi awal
+        :param add_minutes: menambah waktu (menit) untuk menjalankan simulasi
         :return:
         """
         assert self.current_minute <= self.max_minute, \
             f"current minute {self.current_minute} >= max minute {self.max_minute}, stopping simulation"
         func = ofunc if verbose else lambda x: None
+        self.resetSimulation() if reset else None
+        self.max_minute + add_minutes
         func("========== SIMULATION STARTS ==========")
         self.newInterArrival()
         func(f"SIMULATION INFO\t| next customer interarrival = {self.interarival}")
@@ -352,16 +354,6 @@ class SimulationModel:
             sSelected = self.servers[selectedIdx]  # yang akan dipilih
             return sSelected.isBusy, sSelected
 
-    def continueRun(self, add_minute=1, autostart=True, verbose=True, func=print):
-        """
-        method untuk melanjutkan simulasi
-        :param add_minute: berapa menit simulasi akan dilanjutkan
-        :param autostart: jika True maka akan langsung memulai simulasi, jika False maka hanya menambah max_minute
-        :return:
-        """
-        self.max_minute += add_minute
-        if autostart:
-            return self.run(verbose=verbose, ofunc=func)
 
     def resetSimulation(self, newMaxMin=10):
         """
