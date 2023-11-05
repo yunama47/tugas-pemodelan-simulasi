@@ -242,6 +242,7 @@ class Server:
 
 class SimulationModel:
     max_minute: int = -1
+    default_maxmins: int = -1
     current_minute: int = 1
     cNumber: int = 1
     delay: float = 0.0
@@ -268,6 +269,7 @@ class SimulationModel:
         """
         self.servers = servers
         self.max_minute = max_minute
+        self.default_maxmins = max_minute
         self.delay = delay
         self.cumulativeDist = count_cumulative(intrArrivalDist)
 
@@ -288,11 +290,11 @@ class SimulationModel:
         :param add_minutes: menambah waktu (menit) untuk menjalankan simulasi
         :return:
         """
+        self.max_minute += add_minutes
+        func = ofunc if verbose else lambda x: None
+        self.reset() if reset else None
         assert self.current_minute <= self.max_minute, \
             f"current minute {self.current_minute} >= max minute {self.max_minute}, stopping simulation"
-        func = ofunc if verbose else lambda x: None
-        self.resetSimulation() if reset else None
-        self.max_minute + add_minutes
         func("========== SIMULATION STARTS ==========")
         self.newInterArrival()
         func(f"SIMULATION INFO\t| next customer interarrival = {self.interarival}")
@@ -355,14 +357,9 @@ class SimulationModel:
             return sSelected.isBusy, sSelected
 
 
-    def resetSimulation(self, newMaxMin=10):
-        """
-        method untuk mereset model simulasi
-        :param newMaxMin: max_minute baru
-        :return:
-        """
+    def reset(self):
         self.current_minute = 1
-        self.max_minute = newMaxMin
+        self.max_minute = self.default_maxmins
         self.cNumber = 1
         for server in self.servers:
             server.reset()
